@@ -1,0 +1,8 @@
+name: converse
+version: "0.1.0"
+description: "Conversation-only mode for hermes: scope a project before any tools fire. Talk it through with /converse, execute with /go."
+author: ibrahim
+kind: standalone
+hooks:
+  - pre_llm_call
+  - pre_tool_call

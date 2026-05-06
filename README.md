@@ -1,0 +1,60 @@
+# hermes-plugin-converse
+
+a hermes plugin that adds a conversation-only mode. talk through requirements with hermes before any tools fire, then say `/go` when you're ready to execute.
+
+![converse demo](assets/converse-demo.gif)
+
+## why
+
+hermes is an agent. the moment it has a tool, it wants to use it. that's the right default for execution but the wrong default for scoping. when you're starting a project, you usually want to talk it out, push back on requirements, surface tradeoffs, decide what's in and out of scope. tool calls during that phase burn iterations and lock you in before you've decided anything.
+
+`converse` blocks every tool call and tells hermes to act like a thinking partner instead. when the plan is clear, `/go` flips it back and runs the work with the full conversation as context.
+
+## install
+
+```
+hermes plugins install <owner>/hermes-plugin-converse
+hermes plugins enable converse
+```
+
+restart the hermes session and you'll have `/converse` and `/go` available.
+
+## usage
+
+```
+/converse                       # turn on
+> i want to build X. what do you need to know?
+... back-and-forth refining goal, scope, constraints, risks ...
+... model ends each reply with a "Plan so far:" recap ...
+/go                             # execute with everything we just decided
+/go skip the linter step        # optional extra instructions on the way out
+```
+
+other commands:
+
+- `/converse on` — explicit on
+- `/converse off` — exit without executing
+- `/converse status` — check current state
+
+## how it works
+
+two layers, both via hermes plugin hooks:
+
+1. `pre_llm_call` — when converse is on, injects a prompt addendum telling the model to discuss only, ask clarifying questions, push back honestly, and end every reply with a structured "Plan so far:" (GOAL / IN SCOPE / OUT OF SCOPE / OPEN QUESTIONS / NEXT STEPS).
+2. `pre_tool_call` — defensively blocks every tool with a clear message, so even if the model ignores the addendum it still cannot run anything.
+
+`/go` flips the session flag off and uses `PluginContext.inject_message` to start a new turn with the prompt: "execute the plan we converged on above using every requirement we discussed."
+
+## limits
+
+- **CLI only.** `inject_message` is unavailable in gateway sessions (telegram / discord / etc.), so `/go` won't auto-trigger execution there. you'd type the execute message manually.
+- **per-session toggle.** the on/off state is held in the plugin's process memory, keyed by session id. it does not persist across hermes restarts.
+- **no plan artifact written to disk.** if you also want a markdown plan file, hermes' built-in `/plan` skill writes one to `.hermes/plans/`. they compose: scope with `/converse`, ask the model to write the plan with the built-in skill, then `/go`.
+
+## comparison to hermes' built-in `/plan` skill
+
+hermes ships a `/plan` skill that produces a markdown plan in one turn and writes it to disk. it's a doc generator. `converse` is a multi-turn conversation mode with a hard tool block and an explicit `/go` handoff. they solve different problems and can be used together.
+
+## license
+
+MIT
