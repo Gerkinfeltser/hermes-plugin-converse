@@ -104,16 +104,20 @@ def _handle_go(raw_args: str, **kwargs) -> str:
     extra_block = f"Extra instructions from user: {extra}" if extra else ""
     prompt = _GO_PROMPT.format(extra_notes=extra_block).rstrip()
 
-    try:
-        ok = _ctx_ref.inject_message(prompt, role="user")
-        if not ok:
-            return "converse: inject_message failed (gateway mode?). type your execute message manually."
-    except Exception as exc:
-        logger.warning("converse: inject_message failed: %s", exc)
-        return f"converse: inject failed: {exc}"
+    if _ctx_ref is not None:
+        try:
+            ok = _ctx_ref.inject_message(prompt, role="user")
+            if ok:
+                state = "off, executing" if was_on else "wasn't on, executing anyway"
+                return f"converse: {state}."
+        except Exception as exc:
+            logger.warning("converse: inject_message failed: %s", exc)
 
-    state = "off, executing" if was_on else "wasn't on, executing anyway"
-    return f"converse: {state}."
+    state = "off" if was_on else "wasn't on"
+    return (
+        f"converse: {state}. converse mode is disabled — "
+        "tools are unblocked. send your next message to execute."
+    )
 
 
 # ---------------------------------------------------------------------------
