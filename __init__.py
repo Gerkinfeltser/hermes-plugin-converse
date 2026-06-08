@@ -51,6 +51,7 @@ _GO_PROMPT = (
 
 _lock = threading.Lock()
 _enabled_sessions: set[str] = set()
+_gateway_to_agent: dict[str, str] = {}
 _ctx_ref: Optional[Any] = None
 
 
@@ -71,9 +72,15 @@ def _handle_converse(raw_args: str, **kwargs) -> str:
             )
         if arg in {"off", "stop", "disable", "0", "false", "cancel"}:
             _enabled_sessions.discard(session_id)
+            agent_sid = _gateway_to_agent.pop(session_id, None)
+            if agent_sid:
+                _enabled_sessions.discard(agent_sid)
             return "converse: OFF (no execution triggered)"
         if arg in {"status", "?"}:
             on = session_id in _enabled_sessions
+            if not on:
+                agent_sid = _gateway_to_agent.get(session_id)
+                on = agent_sid is not None and agent_sid in _enabled_sessions
             return f"converse: {'ON' if on else 'OFF'}"
 
     return f"unknown: {arg}\nUsage: /converse [on|off|status]"
@@ -86,6 +93,10 @@ def _handle_go(raw_args: str, **kwargs) -> str:
     with _lock:
         was_on = session_id in _enabled_sessions
         _enabled_sessions.discard(session_id)
+        agent_sid = _gateway_to_agent.pop(session_id, None)
+        if agent_sid:
+            was_on = was_on or agent_sid in _enabled_sessions
+            _enabled_sessions.discard(agent_sid)
 
     if _ctx_ref is None:
         return "converse: cannot inject (no plugin context). type your execute message manually."
@@ -109,19 +120,27 @@ def _handle_go(raw_args: str, **kwargs) -> str:
 # Hooks
 # ---------------------------------------------------------------------------
 
-def _on_pre_llm_call(*, session_id: str = "", user_message: Any = None, **_: Any):
+def _on_pre_llm_call(*, session_id: str = "", gateway_session_key: str = "", **_: Any):
     sid = session_id or "_default"
     with _lock:
         if sid not in _enabled_sessions:
-            return None
+            if gateway_session_key and gateway_session_key in _enabled_sessions:
+                _enabled_sessions.add(sid)
+                _gateway_to_agent[gateway_session_key] = sid
+            else:
+                return None
     return {"context": _CONVERSE_ADDENDUM}
 
 
-def _on_pre_tool_call(*, tool_name: str = "", session_id: str = "", **_: Any):
+def _on_pre_tool_call(*, tool_name: str = "", session_id: str = "", gateway_session_key: str = "", **_: Any):
     sid = session_id or "_default"
     with _lock:
         if sid not in _enabled_sessions:
-            return None
+            if gateway_session_key and gateway_session_key in _enabled_sessions:
+                _enabled_sessions.add(sid)
+                _gateway_to_agent[gateway_session_key] = sid
+            else:
+                return None
     return {"action": "block", "message": _BLOCK_MESSAGE}
 
 
