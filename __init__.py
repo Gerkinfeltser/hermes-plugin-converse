@@ -55,6 +55,30 @@ _gateway_to_agent: dict[str, str] = {}
 _ctx_ref: Optional[Any] = None
 
 
+def _is_enabled(session_id: str, gateway_session_key: str = "") -> bool:
+    """Return whether converse mode applies, bridging gateway keys to agents."""
+    if session_id in _enabled_sessions:
+        return True
+
+    if gateway_session_key and gateway_session_key in _enabled_sessions:
+        _enabled_sessions.add(session_id)
+        _gateway_to_agent[gateway_session_key] = session_id
+        return True
+
+    return False
+
+
+def _disable_session(session_id: str) -> bool:
+    """Disable converse mode for a gateway key and any bridged agent session."""
+    was_on = session_id in _enabled_sessions
+    _enabled_sessions.discard(session_id)
+    agent_sid = _gateway_to_agent.pop(session_id, None)
+    if agent_sid:
+        was_on = was_on or agent_sid in _enabled_sessions
+        _enabled_sessions.discard(agent_sid)
+    return was_on
+
+
 # ---------------------------------------------------------------------------
 # Slash commands
 # ---------------------------------------------------------------------------
@@ -71,16 +95,10 @@ def _handle_converse(raw_args: str, **kwargs) -> str:
                 "talk through what you want; type /go when ready to execute."
             )
         if arg in {"off", "stop", "disable", "0", "false", "cancel"}:
-            _enabled_sessions.discard(session_id)
-            agent_sid = _gateway_to_agent.pop(session_id, None)
-            if agent_sid:
-                _enabled_sessions.discard(agent_sid)
+            _disable_session(session_id)
             return "converse: OFF (no execution triggered)"
         if arg in {"status", "?"}:
-            on = session_id in _enabled_sessions
-            if not on:
-                agent_sid = _gateway_to_agent.get(session_id)
-                on = agent_sid is not None and agent_sid in _enabled_sessions
+            on = _is_enabled(session_id)
             return f"converse: {'ON' if on else 'OFF'}"
 
     return f"unknown: {arg}\nUsage: /converse [on|off|status]"
@@ -91,15 +109,7 @@ def _handle_go(raw_args: str, **kwargs) -> str:
     extra = (raw_args or "").strip()
 
     with _lock:
-        was_on = session_id in _enabled_sessions
-        _enabled_sessions.discard(session_id)
-        agent_sid = _gateway_to_agent.pop(session_id, None)
-        if agent_sid:
-            was_on = was_on or agent_sid in _enabled_sessions
-            _enabled_sessions.discard(agent_sid)
-
-    if _ctx_ref is None:
-        return "converse: cannot inject (no plugin context). type your execute message manually."
+        was_on = _disable_session(session_id)
 
     extra_block = f"Extra instructions from user: {extra}" if extra else ""
     prompt = _GO_PROMPT.format(extra_notes=extra_block).rstrip()
@@ -127,24 +137,16 @@ def _handle_go(raw_args: str, **kwargs) -> str:
 def _on_pre_llm_call(*, session_id: str = "", gateway_session_key: str = "", **_: Any):
     sid = session_id or "_default"
     with _lock:
-        if sid not in _enabled_sessions:
-            if gateway_session_key and gateway_session_key in _enabled_sessions:
-                _enabled_sessions.add(sid)
-                _gateway_to_agent[gateway_session_key] = sid
-            else:
-                return None
+        if not _is_enabled(sid, gateway_session_key):
+            return None
     return {"context": _CONVERSE_ADDENDUM}
 
 
 def _on_pre_tool_call(*, tool_name: str = "", session_id: str = "", gateway_session_key: str = "", **_: Any):
     sid = session_id or "_default"
     with _lock:
-        if sid not in _enabled_sessions:
-            if gateway_session_key and gateway_session_key in _enabled_sessions:
-                _enabled_sessions.add(sid)
-                _gateway_to_agent[gateway_session_key] = sid
-            else:
-                return None
+        if not _is_enabled(sid, gateway_session_key):
+            return None
     return {"action": "block", "message": _BLOCK_MESSAGE}
 
 
