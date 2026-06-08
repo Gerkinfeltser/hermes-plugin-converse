@@ -91,17 +91,17 @@ def _handle_converse(raw_args: str, **kwargs) -> str:
         if arg in {"", "on", "start", "enable", "1", "true"}:
             _enabled_sessions.add(session_id)
             return (
-                "converse: ON. i'll discuss only, no tools. "
+                "\U0001f4ac converse: ON. i'll discuss only, no tools. "
                 "talk through what you want; type /go when ready to execute."
             )
         if arg in {"off", "stop", "disable", "0", "false", "cancel"}:
             _disable_session(session_id)
-            return "converse: OFF (no execution triggered)"
+            return "\U0001f4ac converse: OFF (no execution triggered)"
         if arg in {"status", "?"}:
             on = _is_enabled(session_id)
-            return f"converse: {'ON' if on else 'OFF'}"
+            return f"\U0001f4ac converse: {'ON' if on else 'OFF'}"
 
-    return f"unknown: {arg}\nUsage: /converse [on|off|status]"
+    return f"\U0001f4ac unknown: {arg}\nUsage: /converse [on|off|status]"
 
 
 def _handle_go(raw_args: str, **kwargs) -> str:
@@ -119,13 +119,13 @@ def _handle_go(raw_args: str, **kwargs) -> str:
             ok = _ctx_ref.inject_message(prompt, role="user")
             if ok:
                 state = "off, executing" if was_on else "wasn't on, executing anyway"
-                return f"converse: {state}."
+                return f"\U0001f4ac converse: {state}."
         except Exception as exc:
             logger.warning("converse: inject_message failed: %s", exc)
 
     state = "off" if was_on else "wasn't on"
     return (
-        f"converse: {state}. converse mode is disabled — "
+        f"\U0001f4ac converse: {state}. converse mode is disabled — "
         "tools are unblocked. send your next message to execute."
     )
 
