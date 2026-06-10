@@ -66,7 +66,7 @@ this plugin works with stock hermes v0.15.2 and later, but **per-session state o
 - per-session isolation on discord / telegram (otherwise all users share one toggle)
 - gateway key → agent session bridging
 
-the fork PR is [`feat(plugins): propagate session_id to command handlers and hooks`](https://github.com/Gerkinfeltser/hermes/pull/1) — 8 files, +155/-6, no breaking changes. legacy plugin handlers that only accept `raw_args` continue to work. complementary to [upstream PR #34622](https://github.com/NousResearch/hermes/pull/34622). once either merges into hermes, this plugin isolates per-user automatically.
+the PR is [`feat(plugins): propagate session_id to command handlers and hooks`](https://github.com/NousResearch/hermes-agent/pull/10551) — 8 files, +155/-6, no breaking changes. legacy plugin handlers that only accept `raw_args` continue to work. once it merges, this plugin isolates per-user automatically.
 
 ## limits
 
