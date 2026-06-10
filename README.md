@@ -47,10 +47,31 @@ two layers, both via hermes plugin hooks:
 
 `/go` flips the session flag off and uses `PluginContext.inject_message` to start a new turn with the prompt: "execute the plan we converged on above using every requirement we discussed."
 
+## requirements
+
+this plugin works with stock hermes v0.15.2 and later, but **per-session state on gateway (discord / telegram) requires a fork** with three patches:
+
+1. **`session_id` propagation to command handlers.** stock hermes passes only `raw_args` to plugin command handlers — `kwargs.get("session_id")` is always `None`. without this, every session falls back to a shared `_default` key. a fork needs the `call_plugin_command_handler()` helper from `hermes_cli/plugins.py` that uses `inspect.signature()` to forward `session_id` to handlers that accept it.
+
+2. **`session_id` in `pre_tool_call` hooks.** stock hermes passes `session_id=""` to `pre_tool_call`. partially addressed by upstream PR #34622. the fork needs this from all three call sites in `tool_executor.py` and `agent_runtime_helpers.py`.
+
+3. **`gateway_session_key` bridging.** gateway command dispatch uses a discord session key (e.g. `agent:main:discord:group:...`) when no agent is running yet. hooks later receive the agent's UUID. plugins tracking per-session state see two different keys for one conversation. the fork passes `gateway_session_key` through `pre_llm_call` and `pre_tool_call` hooks so plugins can bridge them.
+
+**what works without the fork:**
+- `/converse on|off|status` in CLI sessions
+- tool blocking in CLI sessions
+- `/go` in CLI sessions (full inject_message support)
+
+**what needs the fork:**
+- per-session isolation on discord / telegram (otherwise all users share one toggle)
+- gateway key → agent session bridging
+
+the fork PR is `feat(plugins): propagate session_id to command handlers and hooks` — 8 files, +155/-6, no breaking changes. legacy plugin handlers that only accept `raw_args` continue to work. once it or upstream PR #34622 merges into hermes, this plugin isolates per-user automatically.
+
 ## limits
 
-- **CLI only.** `inject_message` is unavailable in gateway sessions (telegram / discord / etc.), so `/go` won't auto-trigger execution there. you'd type the execute message manually.
-- **per-session toggle.** the on/off state is held in the plugin's process memory, keyed by session id. it does not persist across hermes restarts.
+- **`/go` is CLI only.** `inject_message` is unavailable in gateway sessions (telegram / discord / etc.), so `/go` won't auto-trigger execution there. the plugin prints a fallback telling you to send your next message manually. all other commands (`/converse on|off|status`) work everywhere.
+- **state is in-process memory.** the on/off flag does not persist across hermes restarts.
 - **no plan artifact written to disk.** if you also want a markdown plan file, hermes' built-in `/plan` skill writes one to `.hermes/plans/`. they compose: scope with `/converse`, ask the model to write the plan with the built-in skill, then `/go`.
 
 ## comparison to hermes' built-in `/plan` skill
